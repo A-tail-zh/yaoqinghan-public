@@ -10,7 +10,7 @@ const opened = ref(false)
 const page = ref('invitation')
 const changingPage = ref(false)
 const stage = ref<HTMLElement | null>(null)
-const rsvpWidth = ref<number>()
+const sceneReady = ref(false)
 const rsvpConfirmation = ref<HTMLDialogElement | null>(null)
 const venueImageError = ref(false)
 const music = ref<HTMLAudioElement | null>(null)
@@ -32,6 +32,7 @@ function closeInvitation(message: string) {
   music.value?.pause()
   rsvpConfirmation.value?.close()
   invitation.value = null
+  sceneReady.value = false
   closed.value = true
   loadError.value = message
 }
@@ -50,12 +51,27 @@ async function loadInvitation() {
   try {
     const result = await invitationRequest<Invitation>()
     if (content.value?.venue.imageUrl !== result.content.venue.imageUrl) venueImageError.value = false
+    if (JSON.stringify(content.value) !== JSON.stringify(result.content)) sceneReady.value = false
     invitation.value = result
     closed.value = false
     if (!pages.value.includes(page.value)) page.value = 'invitation'
     checkExpiry()
+    if (!invitation.value) return
+    if (!sceneReady.value) {
+      await nextTick()
+      const images = Array.from(stage.value?.querySelectorAll<HTMLImageElement>('.invitation-background, .door-face, .wax img, img.invitation-line') || [])
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      try {
+        // Decode the actual hidden DOM images so revealing the cover needs no second fetch.
+        await Promise.race([
+          Promise.all(images.map(image => image.decode())),
+          new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Image loading timed out')), 45000) }),
+        ])
+      } finally { clearTimeout(timeout) }
+      if (invitation.value) sceneReady.value = true
+    }
   } catch (error) {
-    closeInvitation(error instanceof ApiError ? error.message : '暂时无法加载邀请函，请重试')
+    closeInvitation(error instanceof ApiError ? error.message : '邀请函或图片未加载完整，请重试')
     closed.value = error instanceof ApiError && (error.status === 404 || error.status === 410)
   } finally { loading.value = false }
 }
@@ -82,7 +98,6 @@ function nextPage() {
   const next = pages.value[pages.value.indexOf(page.value) + 1]
   if (!next) return
   changingPage.value = true
-  if (next === 'rsvp') rsvpWidth.value = stage.value?.getBoundingClientRect().width
   page.value = next
 }
 
@@ -142,16 +157,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div v-if="!content" class="invitation-status" role="status">
-    <p>{{ loading ? '正在加载邀请函…' : loadError }}</p>
+  <div v-if="!sceneReady" class="invitation-status" role="status">
+    <p>{{ loading ? '正在准备邀请函，请稍候…' : loadError }}</p>
     <button v-if="!loading && !closed" class="submit-rsvp" @click="loadInvitation">重试</button>
   </div>
   <main
-    v-else
+    v-if="content"
+    v-show="sceneReady"
     ref="stage"
     class="stage"
     :class="{ opened }"
-    :style="rsvpWidth ? { '--rsvp-width': `${rsvpWidth}px` } : undefined"
+    :aria-busy="!sceneReady"
   >
     <img class="invitation-background" v-if="content.invitation.backgroundImageUrl" :src="content.invitation.backgroundImageUrl" alt="" fetchpriority="high" />
     <Transition name="page" mode="out-in" @after-enter="finishPageChange">
@@ -237,7 +253,7 @@ onUnmounted(() => {
       <span v-if="!opened && !content.invitation.leftDoorImageUrl && !content.invitation.rightDoorImageUrl" class="open-hint">点击开启邀请函</span>
     </button>
     <template v-if="content.bgmUrl">
-      <audio ref="music" :src="content.bgmUrl" loop @play="musicPlaying = true" @pause="musicPlaying = false" @ended="musicPlaying = false" />
+      <audio ref="music" :src="content.bgmUrl" preload="none" loop @play="musicPlaying = true" @pause="musicPlaying = false" @ended="musicPlaying = false" />
       <button v-if="opened" class="music-toggle" :aria-pressed="musicPlaying" @click="toggleMusic">{{ musicPlaying ? '暂停音乐' : '播放音乐' }}</button>
     </template>
     <dialog ref="rsvpConfirmation" class="rsvp-confirmation" aria-labelledby="rsvp-confirmation-heading">
@@ -279,13 +295,19 @@ button:disabled { cursor: default; }
   font-family: "Songti SC", SimSun, serif;
 }
 
+html,
 body {
   margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 #app {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
   place-items: center;
 }
@@ -295,9 +317,9 @@ body {
   --right-door-delay: 150ms;
   --letter-entry: calc(var(--opening-time) + var(--right-door-delay) + 160ms);
   position: relative;
-  width: min(100vw, var(--rsvp-width, min(480px, 46vh)));
-  width: min(100vw, var(--rsvp-width, min(480px, 46dvh)));
-  aspect-ratio: 1206 / 2622;
+  width: min(100vw, 480px, 46vh);
+  width: min(100vw, 480px, 46dvh);
+  height: 100%;
   overflow: hidden;
   overflow: clip;
   isolation: isolate;
@@ -623,6 +645,9 @@ body {
   display: grid;
   gap: clamp(10px, 1.65vh, 15px);
   width: 61%;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   text-align: center;
 }
 
@@ -860,8 +885,16 @@ body {
 @media (max-width: 600px) {
   .stage {
     width: 100%;
-    min-height: 100svh;
   }
+}
+
+@media (max-height: 500px) {
+  .rsvp { gap: 4px; }
+  .rsvp h1 { font-size: 20px; }
+  .rsvp label { font-size: 12px; }
+  .rsvp input { min-height: 30px; }
+  .rsvp .submit-rsvp { min-height: 36px; }
+  .rsvp-flower { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
