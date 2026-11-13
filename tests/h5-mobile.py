@@ -45,6 +45,9 @@ with sync_playwright() as playwright:
         page.goto(url)
         page.wait_for_load_state('networkidle')
         stage = page.locator('.stage')
+        expect(stage).to_be_visible()
+        assert abs(stage.bounding_box()['height'] - height) < 1
+        assert page.evaluate('document.documentElement.scrollHeight <= innerHeight')
         if width <= 600:
             box = stage.bounding_box()
             assert abs(box['x']) < 1 and abs(box['width'] - width) < 1, box
@@ -78,11 +81,15 @@ with sync_playwright() as playwright:
         assert page.evaluate('window.invalidEvents') == 0
         before_width = stage.bounding_box()['width']
         page.set_viewport_size({'width': width, 'height': 380})
-        assert abs(stage.bounding_box()['width'] - before_width) < 1
+        if width <= 600:
+            assert abs(stage.bounding_box()['width'] - before_width) < 1
+        assert abs(stage.bounding_box()['height'] - 380) < 1
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        assert page.evaluate('document.documentElement.scrollHeight <= innerHeight')
         if width <= 600:
             page.set_viewport_size({'width': width + 20, 'height': height})
             assert abs(stage.bounding_box()['width'] - width - 20) < 1
+            assert abs(stage.bounding_box()['height'] - height) < 1
         page.locator('[name=partySize]').fill('2')
         button.click()
         expect(page.locator('.submit-error')).to_have_text('暂时无法保存，请重试')
@@ -94,4 +101,4 @@ with sync_playwright() as playwright:
         assert not errors, errors
         page.close()
     browser.close()
-print('PASS: mobile edge-to-edge layout, viewport resize, inline validation, focus, no native bubbles, failed submit and idempotent retry.')
+print('PASS: single-screen layout, viewport resize, inline validation, focus, no native bubbles, failed submit and idempotent retry.')
