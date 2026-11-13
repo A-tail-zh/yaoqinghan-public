@@ -1,0 +1,20 @@
+{
+  "name": "invitation-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env index.js",
+    "migrate": "node --env-file=.env migrate.js",
+    "test": "node --test assets.test.js content.test.js rsvps.test.js",
+    "test:integration": "node --env-file=.env.test --test integration.test.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.0.0",
+    "express-session": "^1.18.2",
+    "file-type": "^21.0.0",
+    "multer": "^2.0.2",
+    "mysql2": "^3.14.0",
+    "sharp": "^0.35.5"
+  }
+}
