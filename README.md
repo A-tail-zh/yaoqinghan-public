@@ -52,6 +52,8 @@ npm --prefix server test
 npm --prefix server run test:integration
 ```
 
+移动端页面回归需安装 Python Playwright 和 Microsoft Edge。构建 H5 并启动预览后，运行 `python tests/h5-mobile.py http://127.0.0.1:5188/`，检查手机满宽、视口缩小、行内校验及提交失败后的重试。该测试模拟 API 响应，不读取活动内容或写入真实回执。
+
 ## Git 约定
 
 | 分支 | 用途 |
