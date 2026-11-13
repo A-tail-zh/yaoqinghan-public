@@ -21,6 +21,7 @@ const closed = ref(false)
 const submitting = ref(false)
 const submitError = ref('')
 const guest = ref({ name: '', phone: '', partySize: '' })
+const fieldError = ref<{ field: 'name' | 'phone' | 'partySize'; message: string } | null>(null)
 const pages = computed(() => ['invitation', ...(content.value?.displayPages.map(item => item.id) || []), 'map', 'rsvp'])
 const displayPage = computed(() => content.value?.displayPages.find(item => item.id === page.value))
 let expiryTimer: ReturnType<typeof setTimeout> | undefined
@@ -90,16 +91,29 @@ function finishPageChange(element: Element) {
   if (element instanceof HTMLElement) element.focus()
 }
 
-async function submitRsvp() {
+async function submitRsvp(event: Event) {
   if (submitting.value || !invitation.value) return
   checkExpiry()
   if (!invitation.value) return
+  const name = guest.value.name.trim()
+  const phone = guest.value.phone.trim()
   const partySize = Number(guest.value.partySize)
-  if (!Number.isInteger(partySize) || partySize < 1 || partySize > 4294967295) {
-    submitError.value = '请填写含本人的有效正整数人数'
+  fieldError.value = null
+  submitError.value = ''
+  if (!name || name.length > 100) {
+    fieldError.value = { field: 'name', message: !name ? '请填写您的姓名' : '姓名请勿超过 100 个字' }
+  } else if (!/^[+]?[0-9][0-9 ()-]{5,30}$/.test(phone) || !/^[+]?[0-9]{6,20}$/.test(phone.replace(/[ ()-]/g, ''))) {
+    fieldError.value = { field: 'phone', message: !phone ? '请填写您的手机号' : '请检查手机号是否填写正确' }
+  } else if (!/^[1-9][0-9]*$/.test(guest.value.partySize) || !Number.isInteger(partySize) || partySize > 4294967295) {
+    fieldError.value = { field: 'partySize', message: !guest.value.partySize ? '请填写出行人数' : '出行人数请填写有效的正整数' }
+  }
+  if (fieldError.value) {
+    const input = (event.currentTarget as HTMLFormElement).elements.namedItem(fieldError.value.field)
+    await nextTick()
+    if (input instanceof HTMLInputElement) input.focus()
     return
   }
-  const body = JSON.stringify({ name: guest.value.name.trim(), phone: guest.value.phone.trim(), partySize })
+  const body = JSON.stringify({ name, phone, partySize })
   if (pendingSubmission.body !== body) pendingSubmission = { body, key: submissionKey() }
   submitting.value = true
   submitError.value = ''
@@ -137,7 +151,7 @@ onUnmounted(() => {
     ref="stage"
     class="stage"
     :class="{ opened }"
-    :style="rsvpWidth ? { width: `min(100vw, ${rsvpWidth}px)` } : undefined"
+    :style="rsvpWidth ? { '--rsvp-width': `${rsvpWidth}px` } : undefined"
   >
     <img class="invitation-background" v-if="content.invitation.backgroundImageUrl" :src="content.invitation.backgroundImageUrl" alt="" fetchpriority="high" />
     <Transition name="page" mode="out-in" @after-enter="finishPageChange">
@@ -169,17 +183,23 @@ onUnmounted(() => {
           <h2 class="venue-name">{{ venue.name }}</h2>
           <p class="venue-address">{{ venue.address }}</p>
         </div>
-        <form v-else-if="page === 'rsvp'" class="rsvp" @submit.prevent="submitRsvp">
+        <form v-else-if="page === 'rsvp'" class="rsvp" novalidate @submit.prevent="submitRsvp" @input="fieldError = null; submitError = ''">
           <h1 id="page-heading">{{ content.rsvp.title }}</h1>
           <div class="rsvp-divider" aria-hidden="true"></div>
           <label>{{ content.rsvp.nameLabel }}
-            <input v-model="guest.name" :disabled="submitting" name="name" type="text" autocomplete="name" maxlength="100" required />
+            <input v-model="guest.name" :disabled="submitting" name="name" type="text" autocomplete="name" maxlength="100" required
+              :aria-invalid="fieldError?.field === 'name'" :aria-describedby="fieldError?.field === 'name' ? 'name-error' : undefined" />
+            <span v-if="fieldError?.field === 'name'" id="name-error" class="field-error" role="alert">{{ fieldError.message }}</span>
           </label>
           <label>{{ content.rsvp.phoneLabel }}
-            <input v-model="guest.phone" :disabled="submitting" name="phone" type="tel" autocomplete="tel" inputmode="tel" pattern="[+]?[0-9][0-9 \(\)\-]{5,19}" required />
+            <input v-model="guest.phone" :disabled="submitting" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="32" required
+              :aria-invalid="fieldError?.field === 'phone'" :aria-describedby="fieldError?.field === 'phone' ? 'phone-error' : undefined" />
+            <span v-if="fieldError?.field === 'phone'" id="phone-error" class="field-error" role="alert">{{ fieldError.message }}</span>
           </label>
           <label>{{ content.rsvp.partySizeLabel }}
-            <input v-model="guest.partySize" :disabled="submitting" name="partySize" type="text" inputmode="numeric" pattern="[1-9][0-9]*" required />
+            <input v-model="guest.partySize" :disabled="submitting" name="partySize" type="text" inputmode="numeric" required
+              :aria-invalid="fieldError?.field === 'partySize'" :aria-describedby="fieldError?.field === 'partySize' ? 'partySize-error' : undefined" />
+            <span v-if="fieldError?.field === 'partySize'" id="partySize-error" class="field-error" role="alert">{{ fieldError.message }}</span>
           </label>
           <div class="rsvp-flower" aria-hidden="true">✿</div>
           <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
@@ -234,7 +254,22 @@ onUnmounted(() => {
 .display-page { width: 75%; max-height: 70%; overflow-y: auto; text-align: center; }
 .display-page img { width: 100%; max-height: 45vh; object-fit: contain; margin-top: 18px; }
 .display-page p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; }
-.submit-error { color: #ffe2b3; font-size: 12px; margin: 0; }
+.submit-error,
+.field-error {
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid #c3ac7366;
+  border-radius: 6px;
+  background: #344536ed;
+  color: #f1dfa7;
+  font-size: 12px;
+  line-height: 1.6;
+  letter-spacing: .04em;
+  white-space: normal;
+  margin: 0;
+}
+.field-error { width: 88%; }
+.rsvp input[aria-invalid="true"] { border-color: #f1dfa7; }
 button:disabled { cursor: default; }
 .music-toggle { position: absolute; top: 14px; right: 14px; border: 1px solid #c3ac73; background: #394538; color: #f1dfa7; border-radius: 20px; padding: 8px 12px; }
 
@@ -260,8 +295,8 @@ body {
   --right-door-delay: 150ms;
   --letter-entry: calc(var(--opening-time) + var(--right-door-delay) + 160ms);
   position: relative;
-  width: min(100vw, 480px, 46vh);
-  width: min(100vw, 480px, 46dvh);
+  width: min(100vw, var(--rsvp-width, min(480px, 46vh)));
+  width: min(100vw, var(--rsvp-width, min(480px, 46dvh)));
   aspect-ratio: 1206 / 2622;
   overflow: hidden;
   overflow: clip;
@@ -821,6 +856,13 @@ body {
 .invitation-text.title { top: 32%; font-size: clamp(22px, 6vw, 32px); }
 .invitation-text.greeting { top: 47%; }
 .invitation-text.details { top: 66%; }
+
+@media (max-width: 600px) {
+  .stage {
+    width: 100%;
+    min-height: 100svh;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .page-enter-active:has(.rsvp) { transition: none; }
