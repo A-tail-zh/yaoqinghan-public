@@ -1,0 +1,20 @@
+{
+  "name": "invitation-admin",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5189 --strictPort",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4189 --strictPort"
+  },
+  "dependencies": {
+    "element-plus": "^2.11.0",
+    "vue": "^3.5.45"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.11",
+    "typescript": "~5.9",
+    "vite": "^7.3.8",
+    "vue-tsc": "^3.3.14"
+  }
+}
