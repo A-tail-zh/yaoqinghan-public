@@ -1,0 +1,42 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.runtime/
+*.log
+*.sql.gz
+*.dump
+.DS_Store
+Thumbs.db
+
+# 本机私密资料、凭据、证书及业务数据备份
+.local/
+secrets/
+backups/
+exports/
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.sqlite
+*.sqlite3
+*.db
+*.bak
+admin-login.txt
+
+# 本地参考素材与设计原稿
+/参考图片*.png
+/参考效果视频.mp4
+/开门图片.png
+/邀请函内页.jpg
+/邀请函内页设计11.12.psd
+/邀请函带火漆.jpg
+/邀请函首页设计11.12.psd
+
+# 旧活动资源与专用工具仅在本地保留
+/src/assets/
+/scripts/generate-amap.mjs
+/server/seed-assets.js
